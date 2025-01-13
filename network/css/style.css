@@ -239,7 +239,22 @@ border:1px solid #ccc;
 z-index:20;
 position:fixed;
 top:0;
+display:block;
 }
+
+/* Responsively hide the #mainpanel on smaller screens */
+@media (max-width: 768px) {
+	#mainpanel {
+	  display: none;
+	}
+}
+
+/* @media (max-width: 768px) {
+  .sigma-node {
+    r: 3px;
+  }
+}
+  This will be handled by main.js? */
 
 #mainpanel .b1 {
 padding: 0px 0 0 0;

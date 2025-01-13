@@ -43,80 +43,110 @@ Object.size = function(obj) {
     return size;
 };
 
+function adjustNodeSizeForScreen() {
+    const screenWidth = window.innerWidth;
+
+    // Set default values
+    let minNodeSize = 1;
+    let maxNodeSize = 7;
+
+    // Adjust values for smaller screens
+    if (screenWidth < 768) {
+        minNodeSize = 0.5; // Reduce minimum size
+        maxNodeSize = 3;   // Reduce maximum size
+    } else if (screenWidth < 1024) {
+        minNodeSize = 0.8;
+        maxNodeSize = 5;
+    }
+
+    return { minNodeSize, maxNodeSize };
+}
+
 function initSigma(config) {
-	var data=config.data
-	
-	var drawProps, graphProps,mouseProps;
-	if (config.sigma && config.sigma.drawingProperties) 
-		drawProps=config.sigma.drawingProperties;
-	else
-		drawProps={
-        defaultLabelColor: "#000",
-        defaultLabelSize: 14,
-        defaultLabelBGColor: "#ddd",
-        defaultHoverLabelBGColor: "#002147",
-        defaultLabelHoverColor: "#fff",
-        labelThreshold: 10,
-        defaultEdgeType: "curve",
-        hoverFontStyle: "bold",
-        fontStyle: "bold",
-        activeFontStyle: "bold"
-    };
-    
-    if (config.sigma && config.sigma.graphProperties)	
-    	graphProps=config.sigma.graphProperties;
-    else
-    	graphProps={
-        minNodeSize: 1,
-        maxNodeSize: 7,
-        minEdgeSize: 0.2,
-        maxEdgeSize: 0.5
-    	};
-	
-	if (config.sigma && config.sigma.mouseProperties) 
-		mouseProps=config.sigma.mouseProperties;
-	else
-		mouseProps={
-        minRatio: 0.75, // How far can we zoom out?
-        maxRatio: 20, // How far can we zoom in?
-    	};
-	
-    var a = sigma.init(document.getElementById("sigma-canvas")).drawingProperties(drawProps).graphProperties(graphProps).mouseProperties(mouseProps);
+    const data = config.data;
+
+    const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
+
+    const drawProps = config.sigma && config.sigma.drawingProperties ? 
+        config.sigma.drawingProperties : {
+            defaultLabelColor: "#000",
+            defaultLabelSize: 14,
+            defaultLabelBGColor: "#ddd",
+            defaultHoverLabelBGColor: "#002147",
+            defaultLabelHoverColor: "#fff",
+            labelThreshold: 10,
+            defaultEdgeType: "curve",
+            hoverFontStyle: "bold",
+            fontStyle: "bold",
+            activeFontStyle: "bold"
+        };
+
+    const graphProps = config.sigma && config.sigma.graphProperties ?
+        config.sigma.graphProperties : {
+            minNodeSize: minNodeSize, // Use dynamic values
+            maxNodeSize: maxNodeSize, // Use dynamic values
+            minEdgeSize: 0.2,
+            maxEdgeSize: 0.5
+        };
+
+    const mouseProps = config.sigma && config.sigma.mouseProperties ?
+        config.sigma.mouseProperties : {
+            minRatio: 0.75, // How far can we zoom out?
+            maxRatio: 20,   // How far can we zoom in?
+        };
+
+    const a = sigma.init(document.getElementById("sigma-canvas"))
+        .drawingProperties(drawProps)
+        .graphProperties(graphProps)
+        .mouseProperties(mouseProps);
+
     sigInst = a;
     a.active = !1;
     a.neighbors = {};
     a.detail = !1;
 
+    const dataReady = function () { 
+        a.clusters = {};
 
-    dataReady = function() {//This is called as soon as data is loaded
-		a.clusters = {};
+        a.iterNodes(function (b) {
+            a.clusters[b.color] || (a.clusters[b.color] = []);
+            a.clusters[b.color].push(b.id);
+        });
 
-		a.iterNodes(
-			function (b) { //This is where we populate the array used for the group select box
+        a.bind("upnodes", function (a) {
+            nodeActive(a.content[0]);
+        });
 
-				// note: index may not be consistent for all nodes. Should calculate each time. 
-				 // alert(JSON.stringify(b.attr.attributes[5].val));
-				// alert(b.x);
-				a.clusters[b.color] || (a.clusters[b.color] = []);
-				a.clusters[b.color].push(b.id);//SAH: push id not label
-			}
-		
-		);
-	
-		a.bind("upnodes", function (a) {
-		    nodeActive(a.content[0])
-		});
+        a.draw();
+        configSigmaElements(config);
+    };
 
-		a.draw();
-		configSigmaElements(config);
-	}
+    if (data.indexOf("gexf") > 0 || data.indexOf("xml") > 0) {
+        a.parseGexf(data, dataReady);
+    } else {
+        a.parseJson(data, dataReady);
+    }
 
-    if (data.indexOf("gexf")>0 || data.indexOf("xml")>0)
-        a.parseGexf(data,dataReady);
-    else
-	    a.parseJson(data,dataReady);
     gexf = sigmaInst = null;
 }
+
+// Listen for screen resize to adjust node size dynamically
+window.addEventListener("resize", function () {
+    const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
+
+    if (sigInst) {
+        sigInst.graphProperties({
+            minNodeSize: minNodeSize,
+            maxNodeSize: maxNodeSize
+        });
+
+        sigInst.refresh();
+    }
+});
+
+
+
+
 
 
 function setupGUI(config) {
