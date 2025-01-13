@@ -67,6 +67,19 @@ function initSigma(config) {
 
     const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
 
+    // Prevent panning beyond the visible canvas
+    sigInst.bind('graphscaled', function () {
+        const bounds = sigInst.camera.getGraphBounds();
+        const viewport = sigInst.camera.getViewport();
+        
+        if (bounds.left > viewport.width / 2) {
+            sigInst.camera.goTo({ x: bounds.left - viewport.width / 2 });
+        }
+        if (bounds.top > viewport.height / 2) {
+            sigInst.camera.goTo({ y: bounds.top - viewport.height / 2 });
+        }
+    });
+
     const drawProps = config.sigma && config.sigma.drawingProperties ? 
         config.sigma.drawingProperties : {
             defaultLabelColor: "#000",
@@ -91,8 +104,14 @@ function initSigma(config) {
 
     const mouseProps = config.sigma && config.sigma.mouseProperties ?
         config.sigma.mouseProperties : {
-            minRatio: 0.75, // How far can we zoom out?
-            maxRatio: 20,   // How far can we zoom in?
+            minRatio: 0.5, // Allow zooming out to half the original size
+            maxRatio: 5,   // Allow zooming in to 5x the original size
+            zoomDelta: 0.1, // Adjust zoom sensitivity
+            mouseWheelEnabled: true, // Enable mouse/touch gestures for zoom
+            touchEnabled: true, // Enable touch support
+            mouseEnabled: true, // Enable mouse support
+            dragNodeEnabled: false, // Prevent dragging individual nodes
+            singleHover: true // Only allow one node to hover at a time
         };
 
     const a = sigma.init(document.getElementById("sigma-canvas"))
