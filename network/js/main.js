@@ -18,18 +18,22 @@ function GetQueryStringParams(sParam,defaultVal) {
     return defaultVal;
 }
 
+jQuery.getJSON(GetQueryStringParams("config", "config.json"), function (data) {
+    if (!data || data.type !== "network") {
+        alert("Invalid configuration settings.");
+        return;
+    }
 
-jQuery.getJSON(GetQueryStringParams("config","config.json"), function(data, textStatus, jqXHR) {
-	config=data;
-	
-	if (config.type!="network") {
-		//bad config
-		alert("Invalid configuration settings.")
-		return;
-	}
-	
-	//As soon as page is ready (and data ready) set up it
-	$(document).ready(setupGUI(config));
+    config = data;
+
+    // Ensure DOM is ready before setting up the GUI
+    $(document).ready(function () {
+        if (!document.getElementById("sigma-canvas")) {
+            console.error("Error: #sigma-canvas element not found in the DOM.");
+            return;
+        }
+        setupGUI(config);
+    });
 });//End JSON Config load
 
 
@@ -63,94 +67,94 @@ function adjustNodeSizeForScreen() {
 }
 
 function initSigma(config) {
-    const data = config.data;
-
-    const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
-
-    // Prevent panning beyond the visible canvas
-    sigInst.bind('graphscaled', function () {
-        const bounds = sigInst.camera.getGraphBounds();
-        const viewport = sigInst.camera.getViewport();
-        
-        if (bounds.left > viewport.width / 2) {
-            sigInst.camera.goTo({ x: bounds.left - viewport.width / 2 });
-        }
-        if (bounds.top > viewport.height / 2) {
-            sigInst.camera.goTo({ y: bounds.top - viewport.height / 2 });
-        }
-    });
-
-    const drawProps = config.sigma && config.sigma.drawingProperties ? 
-        config.sigma.drawingProperties : {
-            defaultLabelColor: "#000",
-            defaultLabelSize: 14,
-            defaultLabelBGColor: "#ddd",
-            defaultHoverLabelBGColor: "#002147",
-            defaultLabelHoverColor: "#fff",
-            labelThreshold: 10,
-            defaultEdgeType: "curve",
-            hoverFontStyle: "bold",
-            fontStyle: "bold",
-            activeFontStyle: "bold"
-        };
-
-    const graphProps = config.sigma && config.sigma.graphProperties ?
-        config.sigma.graphProperties : {
-            minNodeSize: minNodeSize, // Use dynamic values
-            maxNodeSize: maxNodeSize, // Use dynamic values
-            minEdgeSize: 0.2,
-            maxEdgeSize: 0.5
-        };
-
-    const mouseProps = config.sigma && config.sigma.mouseProperties ?
-        config.sigma.mouseProperties : {
-            minRatio: 0.5, // Allow zooming out to half the original size
-            maxRatio: 5,   // Allow zooming in to 5x the original size
-            zoomDelta: 0.1, // Adjust zoom sensitivity
-            mouseWheelEnabled: true, // Enable mouse/touch gestures for zoom
-            touchEnabled: true, // Enable touch support
-            mouseEnabled: true, // Enable mouse support
-            dragNodeEnabled: false, // Prevent dragging individual nodes
-            singleHover: true // Only allow one node to hover at a time
-        };
-
-    const a = sigma.init(document.getElementById("sigma-canvas"))
-        .drawingProperties(drawProps)
-        .graphProperties(graphProps)
-        .mouseProperties(mouseProps);
-
-    sigInst = a;
-    a.active = !1;
-    a.neighbors = {};
-    a.detail = !1;
-
-    const dataReady = function () { 
-        a.clusters = {};
-
-        a.iterNodes(function (b) {
-            a.clusters[b.color] || (a.clusters[b.color] = []);
-            a.clusters[b.color].push(b.id);
-        });
-
-        a.bind("upnodes", function (a) {
-            nodeActive(a.content[0]);
-        });
-
-        a.draw();
-        configSigmaElements(config);
-    };
-
-    if (data.indexOf("gexf") > 0 || data.indexOf("xml") > 0) {
-        a.parseGexf(data, dataReady);
-    } else {
-        a.parseJson(data, dataReady);
+    // Ensure #sigma-canvas exists
+    const sigmaCanvas = document.getElementById("sigma-canvas");
+    if (!sigmaCanvas) {
+        console.error("Error: #sigma-canvas element not found in the DOM.");
+        return;
     }
 
-    gexf = sigmaInst = null;
+    // Ensure config.data is defined
+    const data = config.data;
+    if (!data) {
+        console.error("Error: Data not found in configuration. Ensure 'config.data' is set.");
+        return;
+    }
+
+    // Adjust node sizes dynamically based on screen width
+    const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
+
+    // Initialize Sigma instance
+    try {
+        const a = sigma.init(sigmaCanvas)
+            .drawingProperties(config.sigma?.drawingProperties || {
+                defaultLabelColor: "#000",
+                defaultLabelSize: 14,
+                defaultLabelBGColor: "#ddd",
+                defaultHoverLabelBGColor: "#002147",
+                defaultLabelHoverColor: "#fff",
+                labelThreshold: 10,
+                defaultEdgeType: "curve",
+                hoverFontStyle: "bold",
+                fontStyle: "bold",
+                activeFontStyle: "bold",
+            })
+            .graphProperties({
+                minNodeSize: minNodeSize, // Use dynamic values
+                maxNodeSize: maxNodeSize, // Use dynamic values
+                minEdgeSize: 0.2,
+                maxEdgeSize: 0.5,
+            })
+            .mouseProperties(config.sigma?.mouseProperties || {
+                minRatio: 0.5,
+                maxRatio: 5,
+                zoomDelta: 0.1,
+                mouseWheelEnabled: true,
+                touchEnabled: true,
+                mouseEnabled: true,
+                dragNodeEnabled: false,
+                singleHover: true,
+            });
+
+        sigInst = a; // Assign initialized Sigma instance to `sigInst`
+
+        a.active = false;
+        a.neighbors = {};
+        a.detail = false;
+
+        // Data readiness callback
+        const dataReady = function () {
+            a.clusters = {};
+
+            a.iterNodes(function (b) {
+                a.clusters[b.color] = a.clusters[b.color] || [];
+                a.clusters[b.color].push(b.id);
+            });
+
+            a.bind("upnodes", function (event) {
+                nodeActive(event.content[0]);
+            });
+
+            a.draw();
+            configSigmaElements(config);
+        };
+
+        // Load data into SigmaJS
+        if (data.includes("gexf") || data.includes("xml")) {
+            a.parseGexf(data, dataReady);
+        } else {
+            a.parseJson(data, dataReady);
+        }
+    } catch (error) {
+        console.error("Error initializing Sigma:", error);
+    }
 }
 
-// Listen for screen resize to adjust node size dynamically
+
+
+// Listen for screen resize to adjust node size dynamically and hide/show #mainpanel
 window.addEventListener("resize", function () {
+    // Adjust node sizes based on screen width
     const { minNodeSize, maxNodeSize } = adjustNodeSizeForScreen();
 
     if (sigInst) {
@@ -161,14 +165,27 @@ window.addEventListener("resize", function () {
 
         sigInst.refresh();
     }
+
+    // Adjust #mainpanel visibility based on screen width
+    const mainPanel = document.querySelector('#mainpanel');
+    const screenWidth = window.innerWidth;
+
+    if (mainPanel) {
+        if (screenWidth <= 768) {
+            mainPanel.style.display = 'none'; // Hide on smaller screens
+        } else {
+            mainPanel.style.display = 'block'; // Show on larger screens
+        }
+    }
 });
 
 
-
-
-
-
 function setupGUI(config) {
+    if (!config || !config.data) {
+        console.error("Invalid configuration: Ensure 'config.data' is properly defined.");
+        return;
+    }
+
 	// Initialise main interface elements
 	var logo=""; // Logo elements
 	if (config.logo.file) {
